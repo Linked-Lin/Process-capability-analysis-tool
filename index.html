@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>制程能力分析工具-V1.4 | 直方图 & Cpk</title>
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', 'Roboto', 'Noto Sans', sans-serif; }
+        body { background: #eef2f5; margin: 0; padding: 24px 20px; }
+        body, button, input, select, .stat-name, .stat-value, .stats-header, .file-label, .small-hint, footer { font-weight: 600; }
+        .container { max-width: 1600px; margin: 0 auto; background: white; border-radius: 32px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #1a2a3a 0%, #0f1a24 100%); color: white; padding: 22px 32px; }
+        .header h1 { margin: 0 0 6px 0; font-weight: 800; font-size: 1.8rem; letter-spacing: -0.3px; }
+        .header p { margin: 0; opacity: 0.9; font-size: 0.85rem; font-weight: 500; }
+        .header-note { margin-top: 12px; font-size: 0.8rem; font-weight: 600; background: rgba(255,255,255,0.15); display: inline-block; padding: 4px 14px; border-radius: 40px; backdrop-filter: blur(2px); letter-spacing: 0.3px; }
+        .main-dashboard { display: flex; flex-wrap: wrap; }
+        .controls-panel { width: 340px; background: #ffffff; border-right: 1px solid #e9edf2; padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+        .grid-full { grid-column: 1 / -1; }
+        .controls-panel input[type="number"], .controls-panel input[type="text"] { width: 100%; padding: 8px 10px; border-radius: 14px; border: 1px solid #cbd5e1; background: white; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
+        .controls-panel input:focus { border-color: #2c6e9e; outline: none; box-shadow: 0 0 0 3px rgba(44,110,158,0.2); }
+        .controls-panel select { width: 100%; padding: 8px 10px; border-radius: 14px; border: 1px solid #cbd5e1; background: white; font-size: 0.85rem; font-weight: 600; outline: none; }
+        .action-btn { background: #2c6e9e; border: none; border-radius: 40px; padding: 9px 12px; font-size: 0.82rem; font-weight: 700; color: white; cursor: pointer; transition: 0.2s; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+        .action-btn:hover { background: #1e557d; transform: translateY(-1px); }
+        .file-label { display: flex; align-items: center; justify-content: center; gap: 8px; background: #ffffff; border: 1.5px dashed #9aa9bf; border-radius: 40px; padding: 9px 12px; cursor: pointer; font-weight: 700; color: #1e2f3e; font-size: 0.82rem; transition: 0.2s; text-align: center; }
+        .file-label:hover { border-color: #2c6e9e; background: #f1f9ff; transform: translateY(-1px); }
+        input[type="file"] { display: none; }
+        .paste-area, .random-gen-area { display: none; margin-top: 6px; }
+        .paste-area textarea { width: 100%; height: 90px; border-radius: 14px; border: 1px solid #cbd5e1; padding: 8px; font-size: 0.8rem; font-weight: 500; resize: vertical; }
+        .btn-load-paste { background: #2c6e9e; color: white; border: none; padding: 6px 14px; border-radius: 40px; font-weight: 700; font-size: 0.8rem; cursor: pointer; margin-top: 4px; }
+        .section-title { font-weight: 800; font-size: 0.9rem; color: #1e293b; border-left: 4px solid #2c6e9e; padding-left: 10px; margin: 4px 0 2px 0; }
+        .small-hint { font-size: 0.68rem; font-weight: 600; color: #5b6e8c; margin-top: 4px; text-align: center; }
+        .status-msg { font-size: 0.75rem; font-weight: 600; padding: 8px 10px; border-radius: 16px; text-align: center; }
+        .status-error { background: #fee9e6; color: #b91c1c; border-left: 4px solid #dc2626; }
+        .status-success { background: #e0f2fe; color: #075985; border-left: 4px solid #0284c7; }
+        .results-panel { flex: 1; padding: 24px 24px; background: #fcfdff; min-width: 0; }
+        .combined-chart-stats { background: #ffffff; border-radius: 0px; border: 2px solid #2c3e50; box-shadow: 0 8px 20px rgba(0,0,0,0.03); overflow: hidden; }
+        .inner-flex { display: flex; flex-wrap: nowrap; gap: 0; align-items: stretch; }
+        .chart-wrapper { flex: 4; background: #ffffff; padding: 12px 12px 12px 16px; min-width: 0; }
+        .stats-card { flex: 0.85; background: #ffffff; border-left: 2px solid #e2e8f0; padding: 16px 16px 16px 0; min-width: 220px; display: flex; flex-direction: column; }
+        .stats-header { font-weight: 800; font-size: 0.9rem; padding: 8px 20px 8px 22px; border-bottom: 2px solid #eef2fa; background: #fafcff; }
+        .stats-list { padding: 16px 20px 20px 22px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .stat-item { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8rem; font-family: 'SF Mono', monospace; border-bottom: 1px dashed #ecf3fa; padding-bottom: 8px; font-weight: 700; }
+        .stat-name { color: #2c3e50; }
+        .stat-value { font-weight: 800; color: #0f172a; background: #f8fafc; padding: 2px 8px; border-radius: 20px; }
+        .bold-stat .stat-name, .bold-stat .stat-value { font-weight: 900; color: #0b3b5f; background: #e9f2fa; }
+        .inner-flex.small-layout { flex-direction: column; }
+        .small-layout .stats-card { border-left: none; border-top: 2px solid #e2e8f0; padding: 16px; }
+        @media (max-width: 860px) { .controls-panel { width: 100%; border-right: none; border-bottom: 1px solid #e9edf2; } .inner-flex { flex-direction: column; } .stats-card { border-left: none; border-top: 2px solid #e2e8f0; padding: 16px; } }
+        footer { font-size: 0.75rem; font-weight: 600; text-align: center; padding: 18px; background: #fafcff; border-top: 1px solid #e9edf2; color: #5b6e8c; }
+        #plotlyChart { width: 440px; height: 440px; border-radius: 16px; }
+        .copy-toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1f2f3e; color: white; padding: 8px 20px; border-radius: 40px; font-size: 0.85rem; font-weight: 600; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📊 制程能力分析工具-V1.4</h1>
+        <p>Developer: 林彰乾 | Date: 2026/6/15 | 上传/粘贴/随机数 | 单双侧规格 | 直方图与统计指标一体化</p>
+        <div class="header-note">📌 备注：直方图长度&宽度固定，页面总宽度采用自适应技术，基于页面大小自动调整</div>
+    </div>
+    <div class="main-dashboard">
+        <div class="controls-panel">
+            <div class="controls-grid">
+                <button id="layoutToggleBtn" class="action-btn">📱 切换到小屏幕布局</button>
+                <button id="copyGraphBtn" class="action-btn">📸 下载并复制图形</button>
+
+                <div class="file-label" onclick="document.getElementById('excelInput').click()">
+                    📂 上传数据
+                    <input type="file" id="excelInput" accept=".xlsx, .xls, .csv, .xlsm" />
+                </div>
+                <button id="addPasteDataBtn" class="action-btn" style="background:#475569;">📋 粘贴数据</button>
+
+                <div class="paste-area grid-full" id="pasteDataArea">
+                    <textarea id="pasteTextarea" placeholder="在此粘贴数据，首行为表头，其他行为数据（制表符或逗号分隔）"></textarea>
+                    <button id="loadPasteBtn" class="btn-load-paste">✅ 加载粘贴数据</button>
+                    <span class="small-hint" style="display:inline-block; margin-left:8px;">支持Tab/逗号分隔，将追加到现有数据</span>
+                </div>
+
+                <div class="grid-full" style="margin-top:4px;">
+                    <button id="generateRandomBtn" class="action-btn" style="background:#475569; width:auto; padding:8px 16px;">🎲 生成随机数</button>
+                    <div class="random-gen-area" id="randomGenArea">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px;">
+                            <div><label style="font-size:0.75rem; font-weight:800;">📛 数据名称</label><input type="text" id="randomDataName" value="随机数据"></div>
+                            <div><label style="font-size:0.75rem; font-weight:800;">📊 均值</label><input type="number" id="randomMean" value="0" step="any"></div>
+                            <div><label style="font-size:0.75rem; font-weight:800;">📈 标准差</label><input type="number" id="randomStd" value="1" step="any" min="0"></div>
+                            <div><label style="font-size:0.75rem; font-weight:800;">🔢 行数</label><input type="number" id="randomRows" value="100" step="1" min="2"></div>
+                        </div>
+                        <button id="generateRandomConfirmBtn" class="btn-load-paste" style="margin-top:8px;">✅ 生成并追加数据</button>
+                    </div>
+                </div>
+
+                <div class="grid-full" id="colSelectorDiv" style="display: none; margin-top:4px;">
+                    <label style="font-size:0.8rem; font-weight:800;">📌 选择分析数据列</label>
+                    <select id="columnSelect"></select>
+                </div>
+                <div id="uploadStatus" class="status-msg grid-full" style="display: none;"></div>
+
+                <div class="section-title grid-full">⚙️ 工艺参数设定</div>
+
+                <div><label style="font-size:0.75rem; font-weight:800;">📏 上限USL</label><input type="number" id="uslInput" step="any" placeholder="可选"></div>
+                <div><label style="font-size:0.75rem; font-weight:800;">📏 下限LSL</label><input type="number" id="lslInput" step="any" placeholder="可选"></div>
+
+                <div><label style="font-size:0.75rem; font-weight:800;">🔢 小数位数</label><input type="number" id="decimalPlaces" value="3" min="0" max="6"></div>
+                <div><label style="font-size:0.75rem; font-weight:800;">📊 频数 (0-200)</label><input type="number" id="binCountInput" value="60" min="0" max="200"></div>
+
+                <div><label style="font-size:0.75rem; font-weight:800;">↔️ X轴最大值</label><input type="number" id="xMax" step="any" placeholder="自动"></div>
+                <div><label style="font-size:0.75rem; font-weight:800;">↔️ X轴最小值</label><input type="number" id="xMin" step="any" placeholder="自动"></div>
+
+                <div><label style="font-size:0.75rem; font-weight:800;">📏 X轴刻度间隙</label><input type="number" id="xDtick" step="any" placeholder="自动"></div>
+                <div><label style="font-size:0.75rem; font-weight:800;">🔢 X轴坐标位数</label><input type="number" id="xDecimalPlaces" min="0" max="6" placeholder="自动"></div>
+
+                <div class="grid-full"><label style="font-size:0.75rem; font-weight:800;">🏷️ 图表名称</label><input type="text" id="chartTitleInput" value="📈 制程能力"></div>
+
+                <button id="refreshBtn" class="action-btn grid-full" style="background:#1e557d; margin-top:4px;">✨ 刷新统计与图表</button>
+            </div>
+            <div class="small-hint">✓ 频数0自动分组 | CPK根据已填规格自动计算 | 可拖动图中USL/LSL标签</div>
+        </div>
+
+        <div class="results-panel">
+            <div class="combined-chart-stats" id="combinedChartStats">
+                <div class="inner-flex" id="innerFlexContainer">
+                    <div class="chart-wrapper"><div id="plotlyChart" style="height:440px; width:440px;"></div></div>
+                    <div class="stats-card">
+                        <div class="stats-header">📋 统计指标 & 过程能力</div>
+                        <div class="stats-list" id="statsList">
+                            <div class="stat-item"><span class="stat-name">规格上限</span><span class="stat-value" id="statUSL">--</span></div>
+                            <div class="stat-item"><span class="stat-name">规格下限</span><span class="stat-value" id="statLSL">--</span></div>
+                            <div class="stat-item"><span class="stat-name">计数</span><span class="stat-value" id="statN">--</span></div>
+                            <div class="stat-item"><span class="stat-name">不良数</span><span class="stat-value" id="statDefects">--</span></div>
+                            <div class="stat-item"><span class="stat-name">均值</span><span class="stat-value" id="statMean">--</span></div>
+                            <div class="stat-item"><span class="stat-name">标准差</span><span class="stat-value" id="statStd">--</span></div>
+                            <div class="stat-item bold-stat"><span class="stat-name">CPK</span><span class="stat-value" id="statCpk">--</span></div>
+                            <div class="stat-item bold-stat"><span class="stat-name">不良率 (%)</span><span class="stat-value" id="statDefectRate">--</span></div>
+                            <div class="stat-item bold-stat"><span class="stat-name">COV (%)</span><span class="stat-value" id="statCOV">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer>📎 支持 .xlsx / .xls / 粘贴 / 随机数 | 自动过滤非数值 | 单双侧规格 | 横坐标可自定义 | 频数0-200组 | USL/LSL标签可拖动</footer>
+</div>
+<div id="copyToast" class="copy-toast">✅ 图形已保存并复制到剪贴板</div>
+
+<script>
+    (function() {
+        let rawDataArray = [];
+        let currentSheetData = [];
+        let sheetColumns = [];
+        let currentColumn = "";
+        let isSmallLayout = false;
+
+        const excelFileInput = document.getElementById('excelInput');
+        const columnSelectDiv = document.getElementById('colSelectorDiv');
+        const columnSelect = document.getElementById('columnSelect');
+        const uploadStatusDiv = document.getElementById('uploadStatus');
+        const uslInput = document.getElementById('uslInput');
+        const lslInput = document.getElementById('lslInput');
+        const decimalPlacesInput = document.getElementById('decimalPlaces');
+        const binCountInput = document.getElementById('binCountInput');
+        const chartTitleInput = document.getElementById('chartTitleInput');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const copyBtn = document.getElementById('copyGraphBtn');
+        const copyToast = document.getElementById('copyToast');
+        const layoutToggleBtn = document.getElementById('layoutToggleBtn');
+        const innerFlex = document.getElementById('innerFlexContainer');
+        const addPasteDataBtn = document.getElementById('addPasteDataBtn');
+        const pasteDataArea = document.getElementById('pasteDataArea');
+        const pasteTextarea = document.getElementById('pasteTextarea');
+        const loadPasteBtn = document.getElementById('loadPasteBtn');
+        const xDecimalPlacesInput = document.getElementById('xDecimalPlaces');
+        const xMaxInput = document.getElementById('xMax');
+        const xMinInput = document.getElementById('xMin');
+        const xDtickInput = document.getElementById('xDtick');
+        const generateRandomBtn = document.getElementById('generateRandomBtn');
+        const randomGenArea = document.getElementById('randomGenArea');
+        const generateRandomConfirmBtn = document.getElementById('generateRandomConfirmBtn');
+
+        const statUSL = document.getElementById('statUSL');
+        const statLSL = document.getElementById('statLSL');
+        const statN = document.getElementById('statN');
+        const statDefects = document.getElementById('statDefects');
+        const statMean = document.getElementById('statMean');
+        const statStd = document.getElementById('statStd');
+        const statCpk = document.getElementById('statCpk');
+        const statDefectRate = document.getElementById('statDefectRate');
+        const statCOV = document.getElementById('statCOV');
+
+        let toastTimer = null;
+        function showMessage(msg, isError = false) {
+            copyToast.textContent = msg;
+            copyToast.style.background = isError ? '#b91c1c' : '#1f2f3e';
+            copyToast.style.opacity = '1';
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { copyToast.style.opacity = '0'; copyToast.style.background = '#1f2f3e'; }, 3000);
+        }
+
+        function getSafeFileName() {
+            let baseName = chartTitleInput.value.trim() || "制程能力";
+            baseName = baseName.replace(/[\\/:*?"<>|]/g, '').substring(0, 50);
+            return baseName + ".png";
+        }
+
+        async function copyImageToClipboard(blob) {
+            if (navigator.clipboard?.write && window.ClipboardItem) {
+                try { await navigator.clipboard.write([new ClipboardItem({[blob.type]: blob})]); return true; } catch(e) {}
+            }
+            return false;
+        }
+
+        async function downloadAndCopyGraph() {
+            const element = document.getElementById('combinedChartStats');
+            if (!element) return;
+            const btn = copyBtn;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ 处理中...';
+            btn.disabled = true;
+            try {
+                const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff', logging: false });
+                const fileName = getSafeFileName();
+                const link = document.createElement('a');
+                link.download = fileName;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                canvas.toBlob(async (blob) => {
+                    const success = await copyImageToClipboard(blob);
+                    showMessage(success ? `✅ 图形已保存并复制` : `✅ 图形已保存 (复制失败)`, !success);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 'image/png');
+            } catch (e) {
+                showMessage('❌ 操作失败', true);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+        copyBtn.addEventListener('click', downloadAndCopyGraph);
+
+        function toggleLayout() {
+            isSmallLayout = !isSmallLayout;
+            innerFlex.classList.toggle('small-layout', isSmallLayout);
+            layoutToggleBtn.innerHTML = isSmallLayout ? '🖥️ 切换到大屏幕布局' : '📱 切换到小屏幕布局';
+        }
+        layoutToggleBtn.addEventListener('click', toggleLayout);
+        if (window.innerWidth <= 860) { isSmallLayout = true; innerFlex.classList.add('small-layout'); layoutToggleBtn.innerHTML = '🖥️ 切换到大屏幕布局'; }
+
+        function showStatusMessage(message, isError = true) {
+            uploadStatusDiv.style.display = "block";
+            uploadStatusDiv.textContent = message;
+            uploadStatusDiv.className = `status-msg ${isError ? 'status-error' : 'status-success'}`;
+            setTimeout(() => { uploadStatusDiv.style.display = "none"; }, 4200);
+        }
+
+        function sampleStdDev(arr) {
+            if (!arr || arr.length < 2) return 0;
+            const m = arr.reduce((a,b)=>a+b,0)/arr.length;
+            return Math.sqrt(arr.reduce((s,v)=>s+(v-m)**2,0)/(arr.length-1));
+        }
+        function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+        function extractNumericFromColumn(col, data) {
+            if (!data?.length) return [];
+            return data.reduce((nums, row) => {
+                let v = row[col];
+                if (v === undefined || v === null || v === "") return nums;
+                if (typeof v === 'number' && isFinite(v)) nums.push(v);
+                else {
+                    let n = parseFloat(String(v).trim());
+                    if (!isNaN(n) && isFinite(n)) nums.push(n);
+                }
+                return nums;
+            }, []);
+        }
+
+        function computeStatistics(data, usl, lsl) {
+            if (!data?.length) return { count:0, defects:0, meanValue:0, stdValue:0, cpk:null, defectRatePct:null, covPct:null };
+            const cnt = data.length, m = mean(data), s = sampleStdDev(data);
+            let defects = 0;
+            const hasU = isFinite(usl), hasL = isFinite(lsl);
+            if (hasU && hasL) data.forEach(v => { if (v<lsl||v>usl) defects++; });
+            else if (hasU) data.forEach(v => { if (v>usl) defects++; });
+            else if (hasL) data.forEach(v => { if (v<lsl) defects++; });
+            let cpk = null;
+            if (s > 0 && isFinite(s)) {
+                if (hasU && hasL) cpk = Math.min((usl-m)/(3*s), (m-lsl)/(3*s));
+                else if (hasU) cpk = (usl-m)/(3*s);
+                else if (hasL) cpk = (m-lsl)/(3*s);
+                if (cpk !== null && !isFinite(cpk)) cpk = null;
+            }
+            let cov = null;
+            if (m !== 0 && isFinite(m) && s > 0) cov = (s/Math.abs(m))*100;
+            else if (m === 0 && s === 0) cov = 0;
+            return { count:cnt, defects, meanValue:m, stdValue:s, cpk, defectRatePct:(defects/cnt)*100, covPct:cov };
+        }
+
+        function updateStatsPanel(usl, lsl, stats) {
+            const dec = Math.max(0, parseInt(decimalPlacesInput.value)||3);
+            statUSL.innerText = isFinite(usl) ? usl.toFixed(dec) : "--";
+            statLSL.innerText = isFinite(lsl) ? lsl.toFixed(dec) : "--";
+            statMean.innerText = stats.meanValue.toFixed(dec);
+            statStd.innerText = stats.stdValue.toFixed(3);
+            statN.innerText = stats.count;
+            statDefects.innerText = stats.defects;
+            statCpk.innerText = stats.cpk !== null ? stats.cpk.toFixed(3) : "N/A";
+            statDefectRate.innerText = stats.defectRatePct !== null ? stats.defectRatePct.toFixed(2)+"%" : "N/A";
+            statCOV.innerText = stats.covPct !== null ? stats.covPct.toPrecision(4)+"%" : "N/A";
+        }
+
+        function renderHistogram(dataArray, binCount, usl, lsl, chartTitle) {
+            const dec = Math.max(0, parseInt(decimalPlacesInput.value)||3);
+            // 完全移除轴标题，使图形更贴合外框
+            const xTitle = '';
+            const yTitle = '';
+
+            const baseLayout = {
+                title: { text: chartTitle || '制程能力', font:{size:17,weight:'bold'}, x:0.5, yref:'paper', y:1.03, yanchor:'bottom' },
+                xaxis: { tickfont:{weight:'bold'}, gridcolor:'#eef2f8', linewidth:2, linecolor:'#333' },
+                yaxis: { tickfont:{weight:'bold'}, gridcolor:'#eef2f8', linewidth:2, linecolor:'#333' },
+                plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+                margin:{t:55, r:25, b:35, l:45}  // 适当缩减边距
+            };
+
+            if (!dataArray?.length) {
+                Plotly.newPlot('plotlyChart', [{
+                    x:[], y:[], type:'scatter', mode:'lines', line:{color:'#94a3b8'}
+                }], baseLayout, {editable: true});
+                return;
+            }
+
+            const trace = {
+                x: dataArray, type:'histogram', histnorm:'count', nbinsx:binCount,
+                marker:{color:'#5f9fd9', line:{color:'#2c6e9e',width:1.5}, opacity:0.8}
+            };
+            const minV = Math.min(...dataArray), maxV = Math.max(...dataArray);
+            const pad = (maxV-minV)*0.1;
+            let xStart = Math.min(minV, isFinite(usl)?usl:minV, isFinite(lsl)?lsl:minV) - (pad||1);
+            let xEnd = Math.max(maxV, isFinite(usl)?usl:maxV, isFinite(lsl)?lsl:maxV) + (pad||1);
+            if (isFinite(parseFloat(xMinInput.value))) xStart = parseFloat(xMinInput.value);
+            if (isFinite(parseFloat(xMaxInput.value))) xEnd = parseFloat(xMaxInput.value);
+
+            const shapes = [], annotations = [];
+            if (isFinite(usl)) {
+                shapes.push({ type:'line', x0:usl, x1:usl, y0:0, y1:1, yref:'paper', line:{color:'#D32F2F', width:3.5} });
+                annotations.push({ x: 1, y: 1.03, xref:'paper', yref:'paper', text:`USL: ${usl.toFixed(dec)}`,
+                    showarrow:false, font:{size:12, weight:'bold', color:'#D32F2F'}, xanchor:'right', yanchor:'bottom', bgcolor:'rgba(255,255,255,0.7)' });
+            }
+            if (isFinite(lsl)) {
+                shapes.push({ type:'line', x0:lsl, x1:lsl, y0:0, y1:1, yref:'paper', line:{color:'#2E7D32', width:3.5} });
+                annotations.push({ x: 0, y: 1.03, xref:'paper', yref:'paper', text:`LSL: ${lsl.toFixed(dec)}`,
+                    showarrow:false, font:{size:12, weight:'bold', color:'#2E7D32'}, xanchor:'left', yanchor:'bottom', bgcolor:'rgba(255,255,255,0.7)' });
+            }
+
+            const xDec = parseInt(xDecimalPlacesInput.value), dtick = parseFloat(xDtickInput.value);
+            const xaxis = {
+                tickfont:{weight:'bold'},
+                range:[xStart,xEnd],
+                zeroline:false,
+                gridcolor:'#e9eef3',
+                linewidth:2,
+                linecolor:'#2c3e50',
+                mirror:true
+            };
+            if (!isNaN(xDec) && xDec>=0) xaxis.tickformat = `.${xDec}f`;
+            if (isFinite(dtick) && dtick>0) xaxis.dtick = dtick;
+
+            const layout = {
+                title: { text: chartTitle || '制程能力', font:{size:17,weight:'bold'}, x:0.5, yref:'paper', y:1.03, yanchor:'bottom' },
+                xaxis: xaxis,
+                yaxis: {
+                    tickfont:{weight:'bold'},
+                    gridcolor:'#e9eef3',
+                    linewidth:2,
+                    linecolor:'#2c3e50',
+                    mirror:true
+                },
+                shapes: shapes,
+                annotations: annotations,
+                plot_bgcolor:'#fff',
+                paper_bgcolor:'#fff',
+                margin: { t:65, r:25, b:40, l:45 }
+            };
+            Plotly.newPlot('plotlyChart', [trace], layout, {editable: true});
+        }
+
+        function refreshAnalysis() {
+            let usl = parseFloat(uslInput.value), lsl = parseFloat(lslInput.value);
+            if (isNaN(usl)) usl = NaN; if (isNaN(lsl)) lsl = NaN;
+            let bin = parseInt(binCountInput.value);
+            if (isNaN(bin) || bin <= 0) bin = rawDataArray.length ? Math.max(2, Math.ceil(Math.log2(rawDataArray.length)+1)) : 60;
+            bin = Math.min(bin, 200);
+            if (isFinite(usl) && isFinite(lsl) && usl <= lsl) showStatusMessage("⚠️ 规格上限必须大于规格下限", true);
+            const stats = computeStatistics(rawDataArray, usl, lsl);
+            updateStatsPanel(usl, lsl, stats);
+            renderHistogram(rawDataArray, bin, usl, lsl, chartTitleInput.value.trim() || "制程能力");
+        }
+
+        function updateColumnSelector() {
+            columnSelect.innerHTML = sheetColumns.map(c => `<option value="${c}">${c}</option>`).join('');
+            if (sheetColumns.length > 0) {
+                columnSelectDiv.style.display = "block";
+                if (!sheetColumns.includes(currentColumn)) currentColumn = sheetColumns[0];
+                columnSelect.value = currentColumn;
+            } else {
+                columnSelectDiv.style.display = "none";
+                currentColumn = "";
+            }
+        }
+
+        function loadDataFromColumn() {
+            if (!currentSheetData.length || !sheetColumns.length) { rawDataArray = []; refreshAnalysis(); return; }
+            const col = columnSelect.value;
+            if (!col) return;
+            currentColumn = col;
+            rawDataArray = extractNumericFromColumn(col, currentSheetData);
+            showStatusMessage(rawDataArray.length ? `✅ 加载列“${col}”，有效数据 ${rawDataArray.length}` : `⚠️ 列无有效数值`, !rawDataArray.length);
+            refreshAnalysis();
+        }
+
+        function appendColumns(newColumns, newRowsData) {
+            if (!newColumns.length) return;
+            const existingCols = new Set(sheetColumns);
+            const addedCols = newColumns.filter(c => !existingCols.has(c));
+            if (addedCols.length === 0) {
+                showStatusMessage("所有列已存在，未追加", true);
+                return;
+            }
+            const oldLen = currentSheetData.length;
+            const newLen = newRowsData.length;
+            const maxRows = Math.max(oldLen, newLen);
+            for (let i = oldLen; i < maxRows; i++) currentSheetData.push({});
+            for (let i = 0; i < maxRows; i++) {
+                const row = currentSheetData[i];
+                for (let col of addedCols) {
+                    row[col] = (i < newLen && newRowsData[i] && newRowsData[i][col] !== undefined) ? newRowsData[i][col] : "";
+                }
+            }
+            sheetColumns = [...sheetColumns, ...addedCols];
+            updateColumnSelector();
+        }
+
+        function handleExcelUpload(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:""});
+                    if (!json.length) throw new Error("无数据");
+                    sheetColumns = Object.keys(json[0]).filter(k => k.trim());
+                    currentSheetData = json.map(row => { let r = {}; sheetColumns.forEach(c => r[c] = row[c]); return r; });
+                    currentColumn = sheetColumns.find(c => extractNumericFromColumn(c, currentSheetData).length) || sheetColumns[0];
+                    updateColumnSelector();
+                    rawDataArray = extractNumericFromColumn(currentColumn, currentSheetData);
+                    showStatusMessage(`✅ 文件加载，数据 ${rawDataArray.length}`, false);
+                    refreshAnalysis();
+                } catch (err) { showStatusMessage("解析Excel错误", true); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        excelFileInput.addEventListener('change', e => {
+            if (!e.target.files[0]) return;
+            rawDataArray = []; currentSheetData = []; sheetColumns = []; columnSelectDiv.style.display = "none";
+            handleExcelUpload(e.target.files[0]);
+        });
+        columnSelect.addEventListener('change', loadDataFromColumn);
+        refreshBtn.addEventListener('click', () => {
+            if (!rawDataArray.length && currentSheetData.length && columnSelect.value) loadDataFromColumn();
+            else refreshAnalysis();
+        });
+
+        addPasteDataBtn.addEventListener('click', () => {
+            const visible = pasteDataArea.style.display === 'block';
+            pasteDataArea.style.display = visible ? 'none' : 'block';
+            if (!visible) pasteTextarea.value = '';
+        });
+
+        function parsePastedText(text) {
+            const lines = text.split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) throw new Error('至少需要表头和一行数据');
+            const delim = lines[0].split('\t').length > 1 ? '\t' : ',';
+            const headers = lines[0].split(delim).map(h => h.trim()).filter(Boolean);
+            const rows = lines.slice(1).map(line => {
+                const vals = line.split(delim);
+                return headers.reduce((o, h, i) => (o[h] = vals[i]?.trim()||'', o), {});
+            });
+            return { headers, jsonData: rows };
+        }
+
+        loadPasteBtn.addEventListener('click', () => {
+            try {
+                const {headers, jsonData} = parsePastedText(pasteTextarea.value);
+                if (currentSheetData.length === 0) {
+                    sheetColumns = headers;
+                    currentSheetData = jsonData;
+                    currentColumn = headers.find(c => extractNumericFromColumn(c, jsonData).length) || headers[0];
+                    updateColumnSelector();
+                    rawDataArray = extractNumericFromColumn(currentColumn, currentSheetData);
+                } else {
+                    appendColumns(headers, jsonData);
+                    if (!sheetColumns.includes(currentColumn)) currentColumn = sheetColumns[0];
+                    columnSelect.value = currentColumn;
+                    rawDataArray = extractNumericFromColumn(currentColumn, currentSheetData);
+                }
+                showStatusMessage(`✅ 粘贴数据已追加，当前列 ${currentColumn}`, false);
+                refreshAnalysis();
+                pasteDataArea.style.display = 'none';
+            } catch (e) { showStatusMessage('解析失败: '+e.message, true); }
+        });
+
+        generateRandomBtn.addEventListener('click', () => {
+            randomGenArea.style.display = randomGenArea.style.display === 'block' ? 'none' : 'block';
+        });
+
+        function normalRandom(mean=0, std=1) {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random();
+            while(v === 0) v = Math.random();
+            return mean + std * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        generateRandomConfirmBtn.addEventListener('click', () => {
+            const name = document.getElementById('randomDataName').value.trim() || "随机数据";
+            const meanVal = parseFloat(document.getElementById('randomMean').value) || 0;
+            const stdVal = parseFloat(document.getElementById('randomStd').value) || 1;
+            const rows = parseInt(document.getElementById('randomRows').value) || 100;
+            if (rows < 2) { showStatusMessage("行数至少为2", true); return; }
+            const data = [];
+            for (let i = 0; i < rows; i++) data.push(normalRandom(meanVal, stdVal));
+            const newRows = data.map(v => ({ [name]: v }));
+            if (currentSheetData.length === 0) {
+                sheetColumns = [name];
+                currentSheetData = newRows;
+                currentColumn = name;
+                updateColumnSelector();
+                rawDataArray = data;
+            } else {
+                appendColumns([name], newRows);
+                if (!sheetColumns.includes(currentColumn)) currentColumn = sheetColumns[0];
+                columnSelect.value = currentColumn;
+                rawDataArray = extractNumericFromColumn(currentColumn, currentSheetData);
+            }
+            showStatusMessage(`✅ 随机数已追加：${name}`, false);
+            refreshAnalysis();
+            randomGenArea.style.display = 'none';
+        });
+
+        function initEmpty() {
+            updateStatsPanel(NaN, NaN, {count:0,defects:0,meanValue:0,stdValue:0,cpk:null,defectRatePct:null,covPct:null});
+            renderHistogram([], 60, NaN, NaN, "制程能力");
+        }
+        initEmpty();
+
+        decimalPlacesInput.addEventListener('change', refreshAnalysis);
+        [uslInput, lslInput, binCountInput, chartTitleInput, xDecimalPlacesInput, xMaxInput, xMinInput, xDtickInput].forEach(el => el.addEventListener('keypress', e => { if(e.key==='Enter') refreshAnalysis(); }));
+    })();
+</script>
+</body>
+</html>
